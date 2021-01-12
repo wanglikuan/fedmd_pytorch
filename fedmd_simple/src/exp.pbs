@@ -1,0 +1,46 @@
+##!/bin/sh
+#PBS -N o_mpi_ps
+#PBS -l nodes=1:ppn=1 -W x=GRES:gpu@1
+#PBS -l walltime=36:00:00
+#PBS -q qgpu01
+#PBS -V
+#PBS -S /bin/bash
+
+module load anaconda3-5.2.0
+module load cuda-9.0
+module load openmpi-3.0.1-gcc-5.5.0
+source activate py_gpu
+#################################################################
+NP=`cat $PBS_NODEFILE | wc -l`
+NN=`cat $PBS_NODEFILE | sort | uniq | tee /tmp/nodes.$$ | wc -l`
+cat $PBS_NODEFILE > /tmp/nodefile.$$
+echo "process will start at : "
+date
+echo "++++++++++++++++++++++++++++++++++++++++"
+cd $PBS_O_WORKDIR
+
+nvidia-smi > nv.out
+#mpirun -n $NP --mca blt self,openib python3 abase.py --model=VGG --N=2000 --cycle=10 > res_VGG_D.out
+
+# mpirun -n $NP python LearnerSimulation.py --model=MnistCNN --workers=16 --epoch=25000 > CNN_Mnist_16workers.out
+# mpirun -n $NP python LearnerSimulation.py --model=LeNet --workers=16 --epoch=25000 > LeNet_Mnist_16workers.out
+# mpirun -n $NP python LearnerSimulation.py --model=LROnCifar10 --workers=16 --epoch=25000 > LR_Cifar10_16workers.out
+
+# mpirun -n $NP python LearnerSimulation.py --model=ResNet18OnCifar10 --workers=15 --ratio=0.1 --epoch=7000 --byzantine=1 --V=0 --method=FABA > bb1.out
+# mpirun -n $NP python LearnerSimulation.py --model=ResNet18OnCifar10 --workers=15 --ratio=0.1 --epoch=7000 --byzantine=2 --V=0 --method=FABA > bb2.out
+# mpirun -n $NP python LearnerSimulation.py --model=ResNet18OnCifar10 --workers=15 --ratio=0.1 --epoch=7000 --byzantine=3 --V=0 --method=FABA > bb3.out
+# mpirun -n $NP python LearnerSimulation.py --model=ResNet18OnCifar10 --workers=15 --ratio=0.1 --epoch=7000 --byzantine=4 --V=0 --method=FABA > bb4.out
+# mpirun -n $NP python LearnerSimulation.py --model=ResNet18OnCifar10 --workers=15 --alpha=0.1 --beta=0.9 --ratio=0.1 --epoch=7000 --lr=0.1 --train-bsz=100 --byzantine=0 --V=0 --loops=1 --method=Mean > ErrCmpnGspar.out
+
+#mpirun -n $NP python LearnerSimulation.py --model=VGG11 --workers=16 --epoch=25000 > DGSVR_VGG_Cifar100_16workers.out
+#mpirun -n $NP python LearnerSimulation.py --model=AlexNet --data-name=cifar10 --workers=8 --epoch=10000 > DGSVR_AlexNet_Cifar10_8workers.out
+mpirun -n $NP python FedMD_main.py --conf ../conf/EMNIST_imbalance_conf.json --gpu=1 > fed_test.out
+
+echo "++++++++++++++++++++++++++++++++++++++++"
+echo "process end at : "
+date
+rm -f /tmp/nodefile.$$
+rm -f /tmp/nodes.$$
+
+module unload openmpi-3.0.1-gcc-5.5.0
+module unload cuda-9.0
