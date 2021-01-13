@@ -155,8 +155,8 @@ def get_dataarray(args,dataset):
     elif dataset == 'cifar100':
         train_dataset = datasets.CIFAR100(data_dir, train=True, download=True)
         test_dataset = datasets.CIFAR100(data_dir, train=False, download=True)
-    X_train, y_train= train_dataset.data,train_dataset.targets
-    X_test, y_test = test_dataset.data,test_dataset.targets
+    X_train, y_train= train_dataset.train_data,train_dataset.train_labels
+    X_test, y_test = test_dataset.test_data,test_dataset.test_labels
     return np.array(X_train), np.array(y_train), np.array(X_test), np.array(y_test)
 
 # 每类采样
