@@ -2,6 +2,7 @@ import os
 import copy
 import numpy as np
 import torch
+import math
 from torch import nn
 from torch.utils.data import Dataset,DataLoader
 from torch.optim import SGD,Adam
@@ -60,6 +61,64 @@ def val_one_model(model,dataloader,criterion=None,device= torch.device('cuda')):
             return sum(loss_out)/len(loss_out),sum(acc)/len(acc)
         else:
             return sum(acc)/len(acc)
+
+
+def get_cosdist(a,b):
+    if len(a) != len(b):
+        return None
+    part_up = 0.0
+    a_sq = 0.0
+    b_sq = 0.0
+    for a1, b1 in zip(a,b):
+        part_up += a1*b1
+        a_sq += a1**2
+        b_sq += b1**2
+    part_down = math.sqrt(a_sq*b_sq)
+    if part_down == 0.0:
+        return None
+    else:
+        return part_up / part_down
+    return 
+
+def get_models_logits(raw_logits, threshold, N_models):  #input:  
+
+    flatten_logits = []
+    cosdist = []
+    tmp_cosdist = []
+    tmp_logits = []
+    models_logits = []
+    # threshold = -1 ############# CHANGE ###############
+    add_model_count = 0
+
+    for index in range(N_models):
+        flatten_logits.append(raw_logits[index].flatten())
+
+    for index in range(N_models):
+        for index2 in range(N_models):
+            if index == index2:
+                tmp_cosdist.append(1)
+            else:
+                tmp_cosdist.append(get_cosdist(flatten_logits[index],flatten_logits[index2]))
+        cosdist.append(tmp_cosdist)   #cosdist = [model1's all cosdist list,model2's all cosdist list,...]
+        tmp_cosdist = []
+
+    #judge threshold
+
+    for index in range(N_models):
+        for index2 in range(N_models):
+            if cosdist[index][index2] > threshold: #cosdist (-1,1), cosdist small means angle big
+                #print(index,index2,cosdist[index][index2])
+                tmp_logits.append(raw_logits[index2])
+                add_model_count += 1
+        print("model_num of model {0} used".format(index))
+        print("-- {0} --".format(add_model_count))
+        tmp_logits = np.sum(tmp_logits,axis=0)
+        tmp_logits /= add_model_count
+        models_logits.append(tmp_logits)
+        add_model_count = 0
+        tmp_logits = []
+
+    return models_logits
 
 def predict(model,dataarray,device):
     model.eval()
@@ -228,6 +287,9 @@ class FedMD():
         collaboration_performance = {i: [] for i in range(self.N_parties)}
         r = 0
         device = torch.device('cuda')
+
+        threshold = -1
+
         while True:
             # At beginning of each round, generate new alignment dataset
             alignment_data = generate_alignment_data(self.public_dataset["X"],
@@ -239,15 +301,33 @@ class FedMD():
             print("update logits ... ")
             # update logits
             logits = []
+            logits_test1 = []     #adddddddddddd
+            model_idx = 0         #adddddddddddd
             for model in self.collaborative_parties:
+                model_idx += 1
                 X_data = copy.deepcopy(alignment_data["X"])
                 if len(X_data.shape)==4:
                     X_data = np.transpose(X_data, (0, 3, 1, 2))
                 else:
                     X_data = np.repeat(X_data[:,None],repeats=3,axis=1)
                 logits.append(predict(model, X_data, device))
+                #if r == self.N_rounds:                                   #adddddddddddd
+                logits_test1.append(predict(model, X_data, device))  #adddddddddddd
             logits = np.sum(logits,axis =0)
             logits /= self.N_parties
+
+            #--------------------
+            logits_models = get_models_logits(logits_test1,threshold,self.N_parties)
+
+            #--------------------
+
+            if r == self.N_rounds:                                   #adddddddddddd
+                #print("logits_test1:")                               #adddddddddddd
+                #print(logits_test1)                               #adddddddddddd
+                print("logits_models:")                       #adddddddddddd
+                print(logits_models)                                        #adddddddddddd
+                print("logits_shape:")                       #adddddddddddd
+                print(logits.shape)                                        #adddddddddddd
 
             # test performance
             print("test performance ... ")
@@ -271,7 +351,7 @@ class FedMD():
             for index, model in enumerate(self.collaborative_parties):
                 print("model {0} starting alignment with public logits... ".format(index))
 
-                train_dataloader = DataLoader(data(alignment_data["X"], logits), batch_size=self.logits_matching_batchsize,
+                train_dataloader = DataLoader(data(alignment_data["X"], logits_models[index]), batch_size=self.logits_matching_batchsize,  ########## SWITCH: logits<=>logits_models[index]
                                               shuffle=True,
                                               sampler=None, batch_sampler=None, num_workers=self.num_workers, drop_last=False)
                 test_dataloader = None
