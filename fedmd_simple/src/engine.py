@@ -62,6 +62,26 @@ def val_one_model(model,dataloader,criterion=None,device= torch.device('cuda')):
         else:
             return sum(acc)/len(acc)
 
+def partitionOfK(numbers, start, end, k):
+  if k < 0 or numbers == [] or start < 0 or end >= len(numbers) or k > end:
+    return None
+  low = start
+  high = end
+  key = numbers[start]
+  while low < high:
+    while low < high and numbers[high] >= key:
+      high -= 1
+    numbers[low] = numbers[high]
+    while low < high and numbers[low] <= key:
+      low += 1
+    numbers[high] = numbers[low]
+  numbers[low] = key
+  if low < k:
+    return partitionOfK(numbers, start + 1, end, k)
+  elif low > k:
+    return partitionOfK(numbers, start, end - 1, k)
+  else:
+    return numbers[low]
 
 def get_cosdist(a,b):
     if len(a) != len(b):
@@ -102,11 +122,17 @@ def get_models_logits(raw_logits, threshold, N_models):  #input:
         cosdist.append(tmp_cosdist)   #cosdist = [model1's all cosdist list,model2's all cosdist list,...]
         tmp_cosdist = []
 
+    print("cosdist:")
+    print(cosdist)
+    thresholdtopk=[]
+    for index in range(N_models):
+        thresholdtopk.append(partitionOfK(cosdist[index], 0, len(cosdist[index]) - 1, int(len(cosdist[index])/2)-1))
     #judge threshold
 
     for index in range(N_models):
         for index2 in range(N_models):
-            if cosdist[index][index2] > threshold: #cosdist (-1,1), cosdist small means angle big
+            #if cosdist[index][index2] > threshold: #cosdist (-1,1), cosdist small means angle big
+            if cosdist[index][index2] > thresholdtopk[index]:
                 #print(index,index2,cosdist[index][index2])
                 tmp_logits.append(raw_logits[index2])
                 add_model_count += 1
